@@ -5,26 +5,14 @@
 
 Weather weather;
 
-// Rain mode: while it's raining (and for RAIN_LOCK_MS afterwards) the pump
-// is locked out and soil readings are ignored; drainage takes over.
-bool rainSeen = false, rainMode = false;
-unsigned long lastRainMs = 0;
-
-// Local clock, taken from the weather reply (timezone=auto) and kept by millis().
-bool clockValid = false;
-uint16_t clockSyncMinOfDay = 0;      // minutes since local midnight at the last sync
-unsigned long clockSyncMs = 0;       // millis() at the last sync
+RainState rain;
+LocalClock localClock;
+Location location;   // starts as the fallback values in config.h; replaced by the
+                     // IP-based lookup when AUTO_LOCATION is on and it succeeds
 
 uint16_t localMinOfDay(unsigned long now) {
-  return (clockSyncMinOfDay + (now - clockSyncMs) / 60000UL) % 1440;
+  return (localClock.syncMinOfDay + (now - localClock.syncMs) / 60000UL) % 1440;
 }
-
-// Where we are. Starts as the fallback values in config.h; replaced by the
-// IP-based lookup when AUTO_LOCATION is on and it succeeds.
-char locationName[22];
-char locationLat[10];
-char locationLon[11];
-bool locationKnown = false;
 
 // Weather request, in flash pieces (too much RAM for one buffer on an Uno).
 // The latitude/longitude are sent between the pieces. timezone=auto makes
@@ -76,16 +64,16 @@ static bool sendWeatherRequest() {
   if (!espWaitFor(F("OK"), 8000)) return false;
 
   fetchStep = 3;   // ask to send, wait for '>'
-  uint16_t len = strlen_P(WEATHER_REQ_A) + strlen(locationLat) + strlen_P(WEATHER_REQ_B) +
-                 strlen(locationLon) + strlen_P(WEATHER_REQ_C);
+  uint16_t len = strlen_P(WEATHER_REQ_A) + strlen(location.lat) + strlen_P(WEATHER_REQ_B) +
+                 strlen(location.lon) + strlen_P(WEATHER_REQ_C);
   espFlush();
   esp.print(F("AT+CIPSEND="));
   esp.println(len);
   if (!espWaitFor(F(">"), 3000)) return false;
   espWriteP(WEATHER_REQ_A);
-  esp.print(locationLat);
+  esp.print(location.lat);
   espWriteP(WEATHER_REQ_B);
-  esp.print(locationLon);
+  esp.print(location.lon);
   espWriteP(WEATHER_REQ_C);
   return true;
 }
@@ -172,14 +160,14 @@ static void applyWeather(const Weather& w, int hh, int mm) {
   weather = w;
 
   if (hh >= 0 && hh < 24 && mm >= 0 && mm < 60) {
-    clockSyncMinOfDay = hh * 60 + mm;
-    clockSyncMs = millis();
-    clockValid = true;
+    localClock.syncMinOfDay = hh * 60 + mm;
+    localClock.syncMs = millis();
+    localClock.valid = true;
   }
 
   if (w.precipNow > 0.0 || isRainCode(w.code)) {
-    rainSeen = true;
-    lastRainMs = millis();
+    rain.seen = true;
+    rain.lastMs = millis();
   }
 }
 
@@ -213,7 +201,7 @@ static void readUntilQuote(char* out, uint8_t n) {
   out[i] = 0;
 }
 
-// Ask ip-api.com where this internet connection is. Sets locationName, locationLat, locationLon.
+// Ask ip-api.com where this internet connection is. Sets location.name, location.lat, location.lon.
 static bool fetchLocationInner() {
   if (!espCmd(F("AT+CIPMUX=0"), F("OK"), 2000)) return false;
   espFlush();
@@ -238,9 +226,9 @@ static bool fetchLocationInner() {
   float lon = esp.parseFloat();
   if (lat == 0 && lon == 0) return false;
 
-  dtostrf(lat, 1, 3, locationLat);
-  dtostrf(lon, 1, 3, locationLon);
-  snprintf_P(locationName, sizeof(locationName), PSTR("%s, %s"), city, region);
+  dtostrf(lat, 1, 3, location.lat);
+  dtostrf(lon, 1, 3, location.lon);
+  snprintf_P(location.name, sizeof(location.name), PSTR("%s, %s"), city, region);
   return true;
 }
 
@@ -250,12 +238,12 @@ bool fetchLocation() {
   delay(300);
   espFlush();
   if (ok) {
-    locationKnown = true;
-    Serial.print(F("Location: ")); Serial.print(locationName);
-    Serial.print(F(" (")); Serial.print(locationLat); Serial.print(F(", "));
-    Serial.print(locationLon); Serial.println(')');
+    location.known = true;
+    Serial.print(F("Location: ")); Serial.print(location.name);
+    Serial.print(F(" (")); Serial.print(location.lat); Serial.print(F(", "));
+    Serial.print(location.lon); Serial.println(')');
   } else {
-    Serial.print(F("Location lookup failed, using ")); Serial.println(locationName);
+    Serial.print(F("Location lookup failed, using ")); Serial.println(location.name);
   }
   return ok;
 }

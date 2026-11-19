@@ -10,17 +10,17 @@
 // One-line status text, shared by the OLED bottom line and the Serial Monitor.
 static void buildStatus(char* out, size_t n) {
 #if CAL_MODE
-  snprintf_P(out, n, PSTR("CAL raw %d  %d%%"), soilRaw, soilPct);
+  snprintf_P(out, n, PSTR("CAL raw %d  %d%%"), soil.raw, soil.pct);
   return;
 #endif
-  if (rainMode)                     strncpy_P(out, PSTR("RAIN MODE: pump off"), n);
-  else if (pumpFault)                   strncpy_P(out, PSTR("CHECK PUMP / WATER"), n);
-  else if (pumpState == PUMP_RUNNING)  strncpy_P(out, PSTR("Watering..."), n);
-  else if (pumpState == PUMP_SOAKING)  strncpy_P(out, PSTR("Soaking in..."), n);
-  else if (freezeLock && wateringActive)   strncpy_P(out, PSTR("Freeze: pump off"), n);
-  else if (rainHold)                strncpy_P(out, PSTR("Rain soon: holding"), n);
-  else if (wateringActive && mlPumpedToday >= MAX_ML_PER_DAY) strncpy_P(out, PSTR("Daily limit hit"), n);
-  else snprintf_P(out, n, PSTR("Soil %d%% %S"), soilPct, (const char*)soilLabel());
+  if (rain.mode)                     strncpy_P(out, PSTR("RAIN MODE: pump off"), n);
+  else if (watering.fault)                   strncpy_P(out, PSTR("CHECK PUMP / WATER"), n);
+  else if (watering.pump == PUMP_RUNNING)  strncpy_P(out, PSTR("Watering..."), n);
+  else if (watering.pump == PUMP_SOAKING)  strncpy_P(out, PSTR("Soaking in..."), n);
+  else if (watering.freezeLock && watering.active)   strncpy_P(out, PSTR("Freeze: pump off"), n);
+  else if (watering.rainHold)                strncpy_P(out, PSTR("Rain soon: holding"), n);
+  else if (watering.active && watering.mlToday >= MAX_ML_PER_DAY) strncpy_P(out, PSTR("Daily limit hit"), n);
+  else snprintf_P(out, n, PSTR("Soil %d%% %S"), soil.pct, (const char*)soilLabel());
   out[n - 1] = 0;
 }
 
@@ -34,8 +34,8 @@ static void drawStatusLine() {
 // 1) NOW: icon, big temperature, condition, humidity, wind
 static void drawNowScreen() {
   char a[12], v[12];
-  oledTextAt(locationName, 0, 0, rainMode ? 11 : 21);
-  if (rainMode) oledTextAt(F("RAIN MODE"), 74, 0, 9);
+  oledTextAt(location.name, 0, 0, rain.mode ? 11 : 21);
+  if (rain.mode) oledTextAt(F("RAIN MODE"), 74, 0, 9);
 
   if (!weather.valid) {
     oledPrintLine(F("No weather data"), 3);
@@ -92,16 +92,16 @@ static void drawGardenScreen() {
   char a[10], v[14];
   oledPrintLine(F("RADISH BED"), 0);
 
-  snprintf_P(a, sizeof(a), PSTR("%d%%"), min(soilPct, 100));
+  snprintf_P(a, sizeof(a), PSTR("%d%%"), min(soil.pct, 100));
   uint8_t n = strlen(a);
   while (n < 5) a[n++] = ' ';       // blank-pad so old digits get erased
   a[n] = 0;
   oledPrintBig(a, 0, 1);                                    // pages 1-2
-  if (rainMode) oledTextAt(F("(ignored)"), 72, 1, 9);
+  if (rain.mode) oledTextAt(F("(ignored)"), 72, 1, 9);
   else          oledTextAt(soilLabel(), 78, 1, 5);
   snprintf_P(v, sizeof(v), PSTR("goal %d-%d%%"), SOIL_START_PCT, SOIL_STOP_PCT);
   oledTextAt(v, 60, 2, 11);
-  oledBar(3, soilPct);
+  oledBar(3, soil.pct);
 
   if (weather.valid) {
     dtostrf(weather.rainMm, 1, 1, a);
@@ -110,7 +110,7 @@ static void drawGardenScreen() {
     strcpy_P(v, PSTR("no data"));
   }
   oledRow(F("Rain today"), v, 4);
-  snprintf_P(v, sizeof(v), PSTR("%d mL"), mlPumpedToday);
+  snprintf_P(v, sizeof(v), PSTR("%d mL"), watering.mlToday);
   oledRow(F("Pumped today"), v, 5);
   if (weather.valid) {
     dtostrf(weather.et0, 1, 1, a);
@@ -162,7 +162,7 @@ static void printSerialWeather() {
 }
 
 static void printSerialClock() {
-  if (!clockValid) return;
+  if (!localClock.valid) return;
   uint16_t m = localMinOfDay(millis());
   Serial.print(F("Time:     ")); Serial.print(m / 60); Serial.print(':');
   if (m % 60 < 10) Serial.print('0');
@@ -174,12 +174,12 @@ void printSerialStatus() {
   buildStatus(st, sizeof(st));
 
   Serial.println(F("------------------------------------------"));
-  Serial.print(F("Soil:     ")); Serial.print(min(soilPct, 100)); Serial.print(F("%  "));
+  Serial.print(F("Soil:     ")); Serial.print(min(soil.pct, 100)); Serial.print(F("%  "));
   Serial.print(soilLabel());
-  Serial.print(F("   (raw ")); Serial.print(soilRaw); Serial.println(')');
+  Serial.print(F("   (raw ")); Serial.print(soil.raw); Serial.println(')');
   Serial.print(F("Status:   ")); Serial.println(st);
 
   printSerialWeather();
-  Serial.print(F("Pumped:   ")); Serial.print(mlPumpedToday); Serial.println(F(" mL today"));
+  Serial.print(F("Pumped:   ")); Serial.print(watering.mlToday); Serial.println(F(" mL today"));
   printSerialClock();
 }

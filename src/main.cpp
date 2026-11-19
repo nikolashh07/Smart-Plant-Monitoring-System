@@ -14,9 +14,9 @@ static uint8_t lastScreen = 255;
 
 // Start with the fallback location from config.h.
 static void loadFallbackLocation() {
-  strncpy(locationName, FALLBACK_LOCATION_NAME, sizeof(locationName) - 1);
-  strncpy(locationLat, FALLBACK_LATITUDE, sizeof(locationLat) - 1);
-  strncpy(locationLon, FALLBACK_LONGITUDE, sizeof(locationLon) - 1);
+  strncpy(location.name, FALLBACK_LOCATION_NAME, sizeof(location.name) - 1);
+  strncpy(location.lat, FALLBACK_LATITUDE, sizeof(location.lat) - 1);
+  strncpy(location.lon, FALLBACK_LONGITUDE, sizeof(location.lon) - 1);
 }
 
 static void joinWifiAtBoot() {
@@ -51,11 +51,11 @@ void setup() {
 // weather fetch gives us the time, fall back to 24 h after boot.
 static void checkMidnight(unsigned long now) {
   static uint16_t prevMinOfDay = 0;
-  if (clockValid) {
+  if (localClock.valid) {
     uint16_t m = localMinOfDay(now);
     if (prevMinOfDay > 1200 && m < 240) midnightReset(now);   // clock wrapped past 00:00
     prevMinOfDay = m;
-  } else if (now - dayStartMs >= 86400000UL) {
+  } else if (now - watering.dayStartMs >= 86400000UL) {
     midnightReset(now);
   }
 }
@@ -63,14 +63,14 @@ static void checkMidnight(unsigned long now) {
 // Refresh location (if still unknown) and weather. Takes up to ~20 s, so it
 // never runs while the pump is on.
 static void refreshWeatherIfDue(unsigned long now) {
-  if (pumpState == PUMP_RUNNING) return;
+  if (watering.pump == PUMP_RUNNING) return;
   if (!firstFetch && now - lastWeatherMs < WEATHER_REFRESH_MS) return;
 
   firstFetch = false;
   lastWeatherMs = now;
   oledPrintLine(F("Updating..."), 7);
 #if AUTO_LOCATION
-  if (!locationKnown) fetchLocation();   // retried each refresh until it works
+  if (!location.known) fetchLocation();   // retried each refresh until it works
 #endif
   Serial.println(F("Fetching weather (can take up to ~20 s)..."));
   bool ok = fetchWeather();
@@ -88,8 +88,8 @@ static void refreshWeatherIfDue(unsigned long now) {
 static bool readSoilIfDue(unsigned long now) {
   if (lastSoilMs != 0 && now - lastSoilMs < SOIL_REFRESH_MS) return false;
   lastSoilMs = now ? now : 1;
-  soilRaw = readSoilRaw();
-  soilPct = rawToPercent(soilRaw);
+  soil.raw = readSoilRaw();
+  soil.pct = rawToPercent(soil.raw);
   return true;
 }
 
@@ -107,7 +107,7 @@ void loop() {
   refreshWeatherIfDue(now);
   bool soilTick = readSoilIfDue(now);
 
-  rainMode = rainSeen && (now - lastRainMs < RAIN_LOCK_MS);
+  rain.mode = rain.seen && (now - rain.lastMs < RAIN_LOCK_MS);
   waterLogic(now);
 
   if (soilTick) printSerialStatus();

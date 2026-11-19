@@ -3,19 +3,14 @@
 #include "weather.h"
 #include "watering.h"
 
-PumpState pumpState = PUMP_IDLE;
-unsigned long dayStartMs = 0;                 // when the daily counters last reset
+Soil soil;
+Watering watering;
+
+// Private to this file: pump timing and the current session.
 static unsigned long stateSinceMs = 0, lastCheckMs = 0, pulseDurationMs = 0;
 static bool checkSoon = true;
-bool wateringActive = false;
-bool pumpFault = false;
-bool rainHold = false;
-bool freezeLock = false;
 static uint8_t pulsesInSession = 0;
 static int lastPulseMl = 0;
-int mlPumpedToday = 0;
-int soilRaw = 0;
-int soilPct = 0;
 
 void pumpOn()  { digitalWrite(PUMP_PIN, PUMP_ON); }
 void pumpOff() { digitalWrite(PUMP_PIN, PUMP_OFF); }
@@ -33,8 +28,8 @@ int rawToPercent(int raw) {
 }
 
 const __FlashStringHelper* soilLabel() {
-  if (soilPct < SOIL_START_PCT) return F("DRY");
-  if (soilPct > 108)       return F("WET");
+  if (soil.pct < SOIL_START_PCT) return F("DRY");
+  if (soil.pct > 108)       return F("WET");
   return F("GOOD");
 }
 
@@ -60,35 +55,35 @@ static unsigned long waterCheckMs() {
 static void finishPulseIfDone(unsigned long now) {
   if (now - stateSinceMs < pulseDurationMs) return;
   pumpOff();
-  mlPumpedToday += lastPulseMl;
+  watering.mlToday += lastPulseMl;
   pulsesInSession++;
-  pumpState = PUMP_SOAKING;
+  watering.pump = PUMP_SOAKING;
   stateSinceMs = now;
 }
 
 // Water is spreading through the soil: wait, then check the soil again.
 static void waitForSoak(unsigned long now) {
   if (now - stateSinceMs < SOAK_MS) return;
-  pumpState = PUMP_IDLE;
+  watering.pump = PUMP_IDLE;
   checkSoon = true;
 }
 
 // Start a session when the soil gets too dry, end it once it is wet enough
 // (hysteresis), and clear any pump fault when the soil recovers.
 static void updateSession() {
-  if (!wateringActive && soilPct < SOIL_START_PCT) { wateringActive = true; pulsesInSession = 0; }
-  if (wateringActive && soilPct >= SOIL_STOP_PCT)  { wateringActive = false; pulsesInSession = 0; pumpFault = false; }
+  if (!watering.active && soil.pct < SOIL_START_PCT) { watering.active = true; pulsesInSession = 0; }
+  if (watering.active && soil.pct >= SOIL_STOP_PCT)  { watering.active = false; pulsesInSession = 0; watering.fault = false; }
 }
 
 // True if every safety rule allows another pulse right now.
-// Also records why not (rainHold / pumpFault) for the status line.
+// Also records why not (watering.rainHold / watering.fault) for the status line.
 static bool pulseAllowed() {
-  rainHold = false;
-  if (!wateringActive || pumpFault) return false;
-  if (pulsesInSession >= MAX_PULSES_PER_SESSION) { pumpFault = true; return false; }
-  if (freezeLock) return false;
-  if (mlPumpedToday >= MAX_ML_PER_DAY) return false;
-  if (rainLikely() && soilPct >= SOIL_CRITICAL_PCT) { rainHold = true; return false; }
+  watering.rainHold = false;
+  if (!watering.active || watering.fault) return false;
+  if (pulsesInSession >= MAX_PULSES_PER_SESSION) { watering.fault = true; return false; }
+  if (watering.freezeLock) return false;
+  if (watering.mlToday >= MAX_ML_PER_DAY) return false;
+  if (rainLikely() && soil.pct >= SOIL_CRITICAL_PCT) { watering.rainHold = true; return false; }
   return true;
 }
 
@@ -99,7 +94,7 @@ static void startPulse(unsigned long now) {
   if (pulseDurationMs > MAX_PUMP_MS) pulseDurationMs = MAX_PUMP_MS;
   lastPulseMl = (int)(pulseDurationMs * PUMP_ML_PER_SEC / 1000UL);
   pumpOn();
-  pumpState = PUMP_RUNNING;
+  watering.pump = PUMP_RUNNING;
   stateSinceMs = now;
 }
 
@@ -109,21 +104,21 @@ void waterLogic(unsigned long now) {
   return;
 #endif
   // Rain mode: pump locked out, soil readings ignored, drainage takes over.
-  if (rainMode) {
+  if (rain.mode) {
     pumpOff();
-    pumpState = PUMP_IDLE;
-    rainHold = false;
+    watering.pump = PUMP_IDLE;
+    watering.rainHold = false;
     return;
   }
-  if (pumpState == PUMP_RUNNING) { finishPulseIfDone(now); return; }
-  if (pumpState == PUMP_SOAKING) { waitForSoak(now);       return; }
+  if (watering.pump == PUMP_RUNNING) { finishPulseIfDone(now); return; }
+  if (watering.pump == PUMP_SOAKING) { waitForSoak(now);       return; }
 
   // Idle: decide whether to start a pulse.
   if (!checkSoon && now - lastCheckMs < waterCheckMs()) return;
   checkSoon = false;
   lastCheckMs = now;
 
-  freezeLock = weather.valid && weather.minC <= FREEZE_LOCK_C;
+  watering.freezeLock = weather.valid && weather.minC <= FREEZE_LOCK_C;
   updateSession();
   if (pulseAllowed()) startPulse(now);
 }
@@ -131,9 +126,9 @@ void waterLogic(unsigned long now) {
 // Reset the pump's daily tracking: millilitres pumped today, the daily limit
 // and any pump fault from yesterday. Rain mode is NOT cleared (it follows the weather).
 void midnightReset(unsigned long now) {
-  dayStartMs = now;
-  mlPumpedToday = 0;
-  pumpFault = false;
+  watering.dayStartMs = now;
+  watering.mlToday = 0;
+  watering.fault = false;
   pulsesInSession = 0;
   checkSoon = true;
   Serial.println(F("*** Midnight reset: pump counters cleared ***"));
