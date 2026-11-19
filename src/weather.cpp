@@ -10,27 +10,27 @@ bool rainSeen = false, rainMode = false;
 unsigned long lastRainMs = 0;
 
 // Local clock, taken from the weather reply (timezone=auto) and kept by millis().
-bool timeValid = false;
-uint16_t syncMinOfDay = 0;      // minutes since local midnight at the last sync
-unsigned long syncMs = 0;       // millis() at the last sync
+bool clockValid = false;
+uint16_t clockSyncMinOfDay = 0;      // minutes since local midnight at the last sync
+unsigned long clockSyncMs = 0;       // millis() at the last sync
 
 uint16_t localMinOfDay(unsigned long now) {
-  return (syncMinOfDay + (now - syncMs) / 60000UL) % 1440;
+  return (clockSyncMinOfDay + (now - clockSyncMs) / 60000UL) % 1440;
 }
 
 // Where we are. Starts as the fallback values above; replaced by the
 // IP-based lookup when AUTO_LOCATION is on and it succeeds.
-char locName[22];
-char locLat[10];
-char locLon[11];
-bool located = false;
+char locationName[22];
+char locationLat[10];
+char locationLon[11];
+bool locationKnown = false;
 
 // Weather request, in flash pieces (too much RAM for one buffer on an Uno).
 // The latitude/longitude are sent between the pieces. timezone=auto makes
 // Open-Meteo return the local time for wherever those coordinates are.
-static const char REQ_A[] PROGMEM = "GET /v1/forecast?latitude=";
-static const char REQ_B[] PROGMEM = "&longitude=";
-static const char REQ_C[] PROGMEM =
+static const char WEATHER_REQ_A[] PROGMEM = "GET /v1/forecast?latitude=";
+static const char WEATHER_REQ_B[] PROGMEM = "&longitude=";
+static const char WEATHER_REQ_C[] PROGMEM =
   "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation"
   "&hourly=temperature_2m,precipitation_probability,weather_code"
   "&daily=precipitation_probability_max,precipitation_sum,"
@@ -39,7 +39,7 @@ static const char REQ_C[] PROGMEM =
   " HTTP/1.0\r\nHost: api.open-meteo.com\r\nConnection: close\r\n\r\n";
 
 // Free IP geolocation (plain HTTP). Only city, region and coordinates are asked for.
-static const char LOC_REQ[] PROGMEM =
+static const char LOCATION_REQ[] PROGMEM =
   "GET /json/?fields=status,regionName,city,lat,lon HTTP/1.0\r\n"
   "Host: ip-api.com\r\nConnection: close\r\n\r\n";
 
@@ -74,17 +74,17 @@ static bool fetchWeatherInner() {
   if (!espWaitFor(F("OK"), 8000)) return false;
 
   fetchStep = 3;   // ask to send, wait for '>'
-  uint16_t len = strlen_P(REQ_A) + strlen(locLat) + strlen_P(REQ_B) +
-                 strlen(locLon) + strlen_P(REQ_C);
+  uint16_t len = strlen_P(WEATHER_REQ_A) + strlen(locationLat) + strlen_P(WEATHER_REQ_B) +
+                 strlen(locationLon) + strlen_P(WEATHER_REQ_C);
   espFlush();
   esp.print(F("AT+CIPSEND="));
   esp.println(len);
   if (!espWaitFor(F(">"), 3000)) return false;
-  espWriteP(REQ_A);
-  esp.print(locLat);
-  espWriteP(REQ_B);
-  esp.print(locLon);
-  espWriteP(REQ_C);
+  espWriteP(WEATHER_REQ_A);
+  esp.print(locationLat);
+  espWriteP(WEATHER_REQ_B);
+  esp.print(locationLon);
+  espWriteP(WEATHER_REQ_C);
 
   fetchStep = 4;   // wait for the server's JSON
   // Wait for "current":{ while keeping the first bytes received, so a
@@ -130,14 +130,14 @@ static bool fetchWeatherInner() {
   if (!esp.find((char*)"\"time\":["))   return false;
   for (uint8_t i = 0; i < 4; i++) {          // "2026-11-04T20:00" -> 20
     if (!esp.find((char*)"T")) return false;
-    w.hr[i].hour = esp.parseInt();
+    w.hourly[i].hour = esp.parseInt();
   }
   if (!esp.find((char*)"\"temperature_2m\":["))           return false;
-  for (uint8_t i = 0; i < 4; i++) w.hr[i].tempC = (int8_t)lroundf(esp.parseFloat());
+  for (uint8_t i = 0; i < 4; i++) w.hourly[i].tempC = (int8_t)lroundf(esp.parseFloat());
   if (!esp.find((char*)"\"precipitation_probability\":[")) return false;
-  for (uint8_t i = 0; i < 4; i++) w.hr[i].rainProb = esp.parseInt();
+  for (uint8_t i = 0; i < 4; i++) w.hourly[i].rainProb = esp.parseInt();
   if (!esp.find((char*)"\"weather_code\":["))             return false;
-  for (uint8_t i = 0; i < 4; i++) w.hr[i].code = esp.parseInt();
+  for (uint8_t i = 0; i < 4; i++) w.hourly[i].code = esp.parseInt();
 
   // "daily":{ does not match "daily_units":{ so we land in the right object.
   if (!esp.find((char*)"\"daily\":{")) return false;
@@ -156,9 +156,9 @@ static bool fetchWeatherInner() {
   weather = w;
 
   if (hh >= 0 && hh < 24 && mm >= 0 && mm < 60) {
-    syncMinOfDay = hh * 60 + mm;
-    syncMs = millis();
-    timeValid = true;
+    clockSyncMinOfDay = hh * 60 + mm;
+    clockSyncMs = millis();
+    clockValid = true;
   }
 
   if (w.precipNow > 0.0 || isRainCode(w.code)) {
@@ -182,7 +182,7 @@ static void readUntilQuote(char* out, uint8_t n) {
   out[i] = 0;
 }
 
-// Ask ip-api.com where this internet connection is. Sets locName, locLat, locLon.
+// Ask ip-api.com where this internet connection is. Sets locationName, locationLat, locationLon.
 static bool fetchLocationInner() {
   if (!espCmd(F("AT+CIPMUX=0"), F("OK"), 2000)) return false;
   espFlush();
@@ -191,9 +191,9 @@ static bool fetchLocationInner() {
 
   espFlush();
   esp.print(F("AT+CIPSEND="));
-  esp.println((uint16_t)strlen_P(LOC_REQ));
+  esp.println((uint16_t)strlen_P(LOCATION_REQ));
   if (!espWaitFor(F(">"), 3000)) return false;
-  espWriteP(LOC_REQ);
+  espWriteP(LOCATION_REQ);
 
   esp.setTimeout(8000);
   char region[16], city[16];
@@ -207,9 +207,9 @@ static bool fetchLocationInner() {
   float lon = esp.parseFloat();
   if (lat == 0 && lon == 0) return false;
 
-  dtostrf(lat, 1, 3, locLat);
-  dtostrf(lon, 1, 3, locLon);
-  snprintf_P(locName, sizeof(locName), PSTR("%s, %s"), city, region);
+  dtostrf(lat, 1, 3, locationLat);
+  dtostrf(lon, 1, 3, locationLon);
+  snprintf_P(locationName, sizeof(locationName), PSTR("%s, %s"), city, region);
   return true;
 }
 
@@ -219,12 +219,12 @@ bool fetchLocation() {
   delay(300);
   espFlush();
   if (ok) {
-    located = true;
-    Serial.print(F("Location: ")); Serial.print(locName);
-    Serial.print(F(" (")); Serial.print(locLat); Serial.print(F(", "));
-    Serial.print(locLon); Serial.println(')');
+    locationKnown = true;
+    Serial.print(F("Location: ")); Serial.print(locationName);
+    Serial.print(F(" (")); Serial.print(locationLat); Serial.print(F(", "));
+    Serial.print(locationLon); Serial.println(')');
   } else {
-    Serial.print(F("Location lookup failed, using ")); Serial.println(locName);
+    Serial.print(F("Location lookup failed, using ")); Serial.println(locationName);
   }
   return ok;
 }

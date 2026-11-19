@@ -12,9 +12,9 @@ void setup() {
   pumpOff();
 
   // Start with the fallback location from the settings at the top.
-  strncpy(locName, LOCATION_NAME, sizeof(locName) - 1);
-  strncpy(locLat, LATITUDE, sizeof(locLat) - 1);
-  strncpy(locLon, LONGITUDE, sizeof(locLon) - 1);
+  strncpy(locationName, FALLBACK_LOCATION_NAME, sizeof(locationName) - 1);
+  strncpy(locationLat, FALLBACK_LATITUDE, sizeof(locationLat) - 1);
+  strncpy(locationLon, FALLBACK_LONGITUDE, sizeof(locationLon) - 1);
 
   Serial.begin(9600);
   Serial.println(F("Booting..."));
@@ -44,22 +44,22 @@ void loop() {
   // Midnight (local time) reset of the pump's daily tracking. Until the first
   // weather fetch gives us the time, fall back to 24 h after boot.
   static uint16_t prevMinOfDay = 0;
-  if (timeValid) {
+  if (clockValid) {
     uint16_t m = localMinOfDay(now);
     if (prevMinOfDay > 1200 && m < 240) midnightReset(now);   // clock wrapped past 00:00
     prevMinOfDay = m;
-  } else if (now - dayStart >= 86400000UL) {
+  } else if (now - dayStartMs >= 86400000UL) {
     midnightReset(now);
   }
 
   // Never block on WiFi while the pump is running.
-  if (pumpState != P_PUMPING &&
+  if (pumpState != PUMP_RUNNING &&
       (firstFetch || now - lastWeather >= WEATHER_REFRESH_MS)) {
     firstFetch = false;
     lastWeather = now;
     oledPrintLine(F("Updating..."), 7);
 #if AUTO_LOCATION
-    if (!located) fetchLocation();   // retried each refresh until it works
+    if (!locationKnown) fetchLocation();   // retried each refresh until it works
 #endif
     Serial.println(F("Fetching weather (can take up to ~20 s)..."));
     bool ok = fetchWeather();
@@ -86,7 +86,7 @@ void loop() {
 
   if (soilTick) printSerialStatus();
 
-  uint8_t screen = (now / SCREEN_SWITCH_MS) % NUM_SCREENS;
+  uint8_t screen = (now / SCREEN_SWITCH_MS) % SCREEN_COUNT;
   if (soilTick || screen != lastScreen) {
     drawScreen(screen, screen != lastScreen);
     lastScreen = screen;

@@ -14,9 +14,9 @@
 // NOTE: IP lookup finds your internet provider's hub, which can be a city or
 // two away, and a phone hotspot is often worse. Set to 0 for exact weather.
 #define AUTO_LOCATION 1
-#define LOCATION_NAME "Austin, Texas"   // top line of weather screen (max 21 chars)
-#define LATITUDE      "30.27"
-#define LONGITUDE     "-97.74"
+#define FALLBACK_LOCATION_NAME "Austin, Texas"   // top line of weather screen (max 21 chars)
+#define FALLBACK_LATITUDE      "30.27"
+#define FALLBACK_LONGITUDE     "-97.74"
 
 // ESP-01 wiring: ESP TX -> D2, ESP RX -> D3 (through a 3.3V level divider!)
 // Set the ESP to 9600 baud once with:  AT+UART_DEF=9600,8,1,0,0
@@ -52,9 +52,9 @@
 // =====================================================================
 // Bed = 96 sq in (~619 sq cm), ~7.9 L of mix. 100 mL on top is ~1.6 mm.
 // Radishes: start watering at ~25% depletion, stop near field capacity.
-#define START_PCT      75   // start watering below this
-#define STOP_PCT       95   // stop once soil reaches this
-#define CRITICAL_PCT   50   // below this, water even if rain is forecast
+#define SOIL_START_PCT      75   // start watering below this
+#define SOIL_STOP_PCT       95   // stop once soil reaches this
+#define SOIL_CRITICAL_PCT   50   // below this, water even if rain is forecast
 
 #define PUMP_ML_PER_SEC 20  // MEASURE THIS: time the pump into a measuring cup
 #define PULSE_ML        100 // water per pulse (before ET scaling)

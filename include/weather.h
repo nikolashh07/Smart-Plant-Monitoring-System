@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-struct HourFc {          // one hour of the short-range forecast
+struct HourForecast {          // one hour of the short-range forecast
   uint8_t hour;          // local hour 0-23
   int8_t  tempC;
   uint8_t rainProb;      // %
@@ -15,7 +15,7 @@ struct Weather {
   int   code = 0;
   float windKmh = 0;
   float precipNow = 0;  // rain right now, mm
-  HourFc hr[4];         // this hour + the next 3
+  HourForecast hourly[4];         // this hour + the next 3
   int   rainProb = 0;   // today's max chance of rain, %
   float rainMm = 0;     // today's expected rain, mm
   float et0 = 3.0;      // today's reference evapotranspiration, mm
@@ -30,14 +30,14 @@ extern bool rainSeen, rainMode;
 extern unsigned long lastRainMs;
 
 // Local clock, taken from the weather reply and kept by millis().
-extern bool timeValid;
+extern bool clockValid;
 uint16_t localMinOfDay(unsigned long now);
 
 // Where we are (fallback values from config.h, or the IP lookup).
-extern char locName[22];
-extern char locLat[10];
-extern char locLon[11];
-extern bool located;
+extern char locationName[22];
+extern char locationLat[10];
+extern char locationLon[11];
+extern bool locationKnown;
 
 bool fetchLocation();
 bool fetchWeather();

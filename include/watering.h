@@ -1,15 +1,15 @@
 #pragma once
 #include <Arduino.h>
 
-enum PumpState : uint8_t { P_IDLE, P_PUMPING, P_SOAKING };
+enum PumpState : uint8_t { PUMP_IDLE, PUMP_RUNNING, PUMP_SOAKING };
 
 extern PumpState pumpState;
-extern unsigned long dayStart;
-extern bool session;      // true from "too dry" until "wet enough" (hysteresis)
-extern bool fault;        // soil didn't respond to water: pump/reservoir problem
-extern bool holdRain;
+extern unsigned long dayStartMs;
+extern bool wateringActive;      // true from "too dry" until "wet enough" (hysteresis)
+extern bool pumpFault;        // soil didn't respond to water: pump/reservoir problem
+extern bool rainHold;
 extern bool freezeLock;
-extern int mlToday;
+extern int mlPumpedToday;
 extern int soilRaw;
 extern int soilPct;
 

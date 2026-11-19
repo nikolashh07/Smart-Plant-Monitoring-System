@@ -5,7 +5,7 @@
 
 // ---- Weather icons, drawn at runtime (no bitmap tables) ---------------
 // Shapes are defined on a 24x24 grid and sampled at 16 or 24 px.
-enum : uint8_t { IC_SUN, IC_PART, IC_CLOUD, IC_FOG, IC_RAIN, IC_SNOW, IC_STORM };
+enum : uint8_t { ICON_SUN, ICON_PART, ICON_CLOUD, ICON_FOG, ICON_RAIN, ICON_SNOW, ICON_STORM };
 
 static bool inCircle(float x, float y, float cx, float cy, float r) {
   float dx = x - cx, dy = y - cy;
@@ -38,19 +38,19 @@ static bool sunHit(float x, float y, float cx, float cy, float r, float rin, flo
 
 static bool iconPixel(uint8_t t, float x, float y) {
   switch (t) {
-    case IC_SUN:   return sunHit(x, y, 12, 12, 5, 7.5, 11);
-    case IC_PART:  return cloudHit(x, y, 3, 0) ||
+    case ICON_SUN:   return sunHit(x, y, 12, 12, 5, 7.5, 11);
+    case ICON_PART:  return cloudHit(x, y, 3, 0) ||
                           (sunHit(x, y, 8, 8, 4, 6, 8.5) && !cloudHit(x, y, 3, 1.6));
-    case IC_CLOUD: return cloudHit(x, y, 0.5, 0);
-    case IC_FOG:   return x >= 3 && x <= 21 &&
+    case ICON_CLOUD: return cloudHit(x, y, 0.5, 0);
+    case ICON_FOG:   return x >= 3 && x <= 21 &&
                           (fabsf(y - 6) < 1 || fabsf(y - 11) < 1 || fabsf(y - 16) < 1 || fabsf(y - 21) < 1);
-    case IC_RAIN:  return cloudHit(x, y, -2, 0) ||
+    case ICON_RAIN:  return cloudHit(x, y, -2, 0) ||
                           segHit(x, y, 8, 19, 7, 23, 0.9) || segHit(x, y, 13, 19, 12, 23, 0.9) ||
                           segHit(x, y, 18, 19, 17, 23, 0.9);
-    case IC_SNOW:  return cloudHit(x, y, -2, 0) ||
+    case ICON_SNOW:  return cloudHit(x, y, -2, 0) ||
                           inCircle(x, y, 7, 20, 1.4) || inCircle(x, y, 12, 22.5, 1.4) ||
                           inCircle(x, y, 17, 20, 1.4);
-    case IC_STORM: return cloudHit(x, y, -2, 0) ||
+    case ICON_STORM: return cloudHit(x, y, -2, 0) ||
                           segHit(x, y, 14, 18, 11, 21, 1.0) || segHit(x, y, 11, 21, 15, 21, 1.0) ||
                           segHit(x, y, 15, 21, 12, 24, 1.0);
   }
@@ -58,13 +58,13 @@ static bool iconPixel(uint8_t t, float x, float y) {
 }
 
 uint8_t iconFor(int c) {
-  if (c <= 1)  return IC_SUN;
-  if (c == 2)  return IC_PART;
-  if (c == 3)  return IC_CLOUD;
-  if (c <= 48) return IC_FOG;
-  if ((c >= 71 && c <= 77) || c == 85 || c == 86) return IC_SNOW;
-  if (c >= 95) return IC_STORM;
-  return IC_RAIN;
+  if (c <= 1)  return ICON_SUN;
+  if (c == 2)  return ICON_PART;
+  if (c == 3)  return ICON_CLOUD;
+  if (c <= 48) return ICON_FOG;
+  if ((c >= 71 && c <= 77) || c == 85 || c == 86) return ICON_SNOW;
+  if (c >= 95) return ICON_STORM;
+  return ICON_RAIN;
 }
 
 // size = 16 or 24 px square; occupies size/8 pages starting at `page`.
