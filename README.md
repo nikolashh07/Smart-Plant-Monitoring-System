@@ -13,14 +13,15 @@ It reads a capacitive soil-moisture sensor, pulls the local weather forecast ove
 
 ## Setup
 1. Install [PlatformIO](https://platformio.org/).
-2. Set `WIFI_SSID` and `WIFI_PASS` in `include/config.h` (all other settings live there too). Do not commit real credentials.
+2. Copy `include/secrets.example.h` to `include/secrets.h` and put in your WiFi name and password (it is git-ignored). All other settings are in `include/config.h`. Do not commit real credentials.
 3. Calibrate the soil sensor (`CAL_MODE 1`) and measure the pump rate (`PUMP_ML_PER_SEC`).
 4. Build and upload: `pio run -t upload`
 
 `tools/espcheck.cpp` is an ESP-01 diagnostic: `pio run -e espcheck -t upload`, then open the serial monitor at 9600 baud.
 
 ## Code layout
-- `include/config.h`: every setting (WiFi, pins, soil calibration, watering rules, timers)
+- `include/secrets.h`: WiFi name and password (git-ignored; template in `secrets.example.h`)
+- `include/config.h`: every other setting (WiFi, pins, soil calibration, watering rules, timers)
 - `src/main.cpp`: `setup()` and `loop()`
 - `src/rules.cpp`: the watering rules as pure functions (unit-tested)
 - `src/watering.cpp`: soil reading and the pump state machine, built on the rules

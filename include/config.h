@@ -6,8 +6,13 @@
 // =====================================================================
 // 1) EDIT THESE: WiFi + location
 // =====================================================================
-#define WIFI_SSID     "YOUR_WIFI_SSID"
-#define WIFI_PASS     "YOUR_WIFI_PASSWORD"
+// WIFI_SSID and WIFI_PASS live in secrets.h (git-ignored).
+// First time: copy secrets.example.h to secrets.h and fill it in.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "Missing include/secrets.h: copy include/secrets.example.h to include/secrets.h and fill in your WiFi details."
+#endif
 // Auto-detect where we are from the internet connection (IP address).
 // 1 = look it up (these three below become the fallback if it fails)
 // 0 = always use the three values below

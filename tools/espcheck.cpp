@@ -11,9 +11,10 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 
-// Same as the main sketch. Edit if your network details change.
-#define TEST_SSID "YOUR_WIFI_SSID"
-#define TEST_PASS "YOUR_WIFI_PASSWORD"
+// WiFi details come from include/secrets.h, same as the main sketch.
+#include "secrets.h"
+#define TEST_SSID WIFI_SSID
+#define TEST_PASS WIFI_PASS
 
 #define ESP_RX_PIN 2   // ESP TX -> D2
 #define ESP_TX_PIN 3   // ESP RX -> D3 (through the divider)
