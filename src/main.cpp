@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "config.h"
 #include "oled.h"
+#include "rules.h"
 #include "esp.h"
 #include "weather.h"
 #include "watering.h"
@@ -89,7 +90,7 @@ static bool readSoilIfDue(unsigned long now) {
   if (lastSoilMs != 0 && now - lastSoilMs < SOIL_REFRESH_MS) return false;
   lastSoilMs = now ? now : 1;
   soil.raw = readSoilRaw();
-  soil.pct = rawToPercent(soil.raw);
+  soil.pct = soilPercent(soil.raw);
   return true;
 }
 

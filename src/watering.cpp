@@ -1,5 +1,6 @@
 // Soil reading, watering rules and the pump state machine.
 #include "config.h"
+#include "rules.h"
 #include "weather.h"
 #include "watering.h"
 
@@ -21,34 +22,10 @@ int readSoilRaw() {
   return (int)(sum / 16);
 }
 
-// 0% = dry mix, 100% = field capacity (can read a bit over 100 when soggy).
-int rawToPercent(int raw) {
-  long pct = (long)(SOIL_DRY_RAW - raw) * 100L / (SOIL_DRY_RAW - SOIL_FC_RAW);
-  return (int)constrain(pct, 0, 130);
-}
-
 const __FlashStringHelper* soilLabel() {
   if (soil.pct < SOIL_START_PCT) return F("DRY");
   if (soil.pct > 108)       return F("WET");
   return F("GOOD");
-}
-
-static bool rainLikely() {
-  return weather.valid && (weather.rainProb >= RAIN_PROB_HOLD || weather.rainMm >= RAIN_MM_HOLD);
-}
-
-// Hot, dry, windy day -> bigger pulses; cool day -> smaller.
-static float etScale() {
-  if (!weather.valid) return 1.0;
-  float s = weather.et0 / 3.0;
-  return constrain(s, 0.7, 1.5);
-}
-
-static unsigned long waterCheckMs() {
-  float et = weather.valid ? weather.et0 : 3.0;
-  if (et >= 5.0) return WATER_CHECK_MS / 2;
-  if (et <= 2.0) return WATER_CHECK_MS * 2;
-  return WATER_CHECK_MS;
 }
 
 // A pulse is running: stop the pump once its time is up.
@@ -68,31 +45,33 @@ static void waitForSoak(unsigned long now) {
   checkSoon = true;
 }
 
-// Start a session when the soil gets too dry, end it once it is wet enough
-// (hysteresis), and clear any pump fault when the soil recovers.
+// Start a session when the soil gets too dry, end it once it is wet enough,
+// and clear any pump fault when the soil recovers.
 static void updateSession() {
-  if (!watering.active && soil.pct < SOIL_START_PCT) { watering.active = true; pulsesInSession = 0; }
-  if (watering.active && soil.pct >= SOIL_STOP_PCT)  { watering.active = false; pulsesInSession = 0; watering.fault = false; }
+  bool next = nextSessionActive(watering.active, soil.pct);
+  if (next == watering.active) return;
+  watering.active = next;
+  pulsesInSession = 0;
+  if (!next) watering.fault = false;
 }
 
 // True if every safety rule allows another pulse right now.
-// Also records why not (watering.rainHold / watering.fault) for the status line.
+// Also records why not (rainHold / fault) for the status line.
 static bool pulseAllowed() {
-  watering.rainHold = false;
-  if (!watering.active || watering.fault) return false;
-  if (pulsesInSession >= MAX_PULSES_PER_SESSION) { watering.fault = true; return false; }
-  if (watering.freezeLock) return false;
-  if (watering.mlToday >= MAX_ML_PER_DAY) return false;
-  if (rainLikely() && soil.pct >= SOIL_CRITICAL_PCT) { watering.rainHold = true; return false; }
-  return true;
+  PulseInputs in = { watering.active, watering.fault, pulsesInSession, watering.freezeLock,
+                     watering.mlToday, rainForecastHolds(weather.valid, weather.rainProb, weather.rainMm),
+                     soil.pct };
+  PulseCheck check = checkPulse(in);
+  watering.rainHold = (check == PULSE_RAIN_HOLD);
+  if (check == PULSE_NEW_FAULT) watering.fault = true;
+  return check == PULSE_OK;
 }
 
 // Size the pulse for today's evaporation (capped by MAX_PUMP_MS) and turn the pump on.
 static void startPulse(unsigned long now) {
-  lastPulseMl = (int)(PULSE_ML * etScale() + 0.5);
-  pulseDurationMs = (unsigned long)lastPulseMl * 1000UL / PUMP_ML_PER_SEC;
-  if (pulseDurationMs > MAX_PUMP_MS) pulseDurationMs = MAX_PUMP_MS;
-  lastPulseMl = (int)(pulseDurationMs * PUMP_ML_PER_SEC / 1000UL);
+  Pulse p = planPulse(etScale(weather.valid, weather.et0));
+  lastPulseMl = p.ml;
+  pulseDurationMs = p.durationMs;
   pumpOn();
   watering.pump = PUMP_RUNNING;
   stateSinceMs = now;
@@ -114,11 +93,11 @@ void waterLogic(unsigned long now) {
   if (watering.pump == PUMP_SOAKING) { waitForSoak(now);       return; }
 
   // Idle: decide whether to start a pulse.
-  if (!checkSoon && now - lastCheckMs < waterCheckMs()) return;
+  if (!checkSoon && now - lastCheckMs < waterCheckInterval(weather.valid, weather.et0)) return;
   checkSoon = false;
   lastCheckMs = now;
 
-  watering.freezeLock = weather.valid && weather.minC <= FREEZE_LOCK_C;
+  watering.freezeLock = freezeLockActive(weather.valid, weather.minC);
   updateSession();
   if (pulseAllowed()) startPulse(now);
 }

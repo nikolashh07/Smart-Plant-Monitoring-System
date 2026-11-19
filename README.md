@@ -22,8 +22,12 @@ It reads a capacitive soil-moisture sensor, pulls the local weather forecast ove
 ## Code layout
 - `include/config.h`: every setting (WiFi, pins, soil calibration, watering rules, timers)
 - `src/main.cpp`: `setup()` and `loop()`
-- `src/watering.cpp`: soil reading, watering rules, pump state machine
+- `src/rules.cpp`: the watering rules as pure functions (unit-tested)
+- `src/watering.cpp`: soil reading and the pump state machine, built on the rules
 - `src/weather.cpp`: weather and location fetch (Open-Meteo, ip-api.com)
 - `src/esp.cpp`: ESP-01 AT-command helpers
 - `src/screens.cpp`: OLED screens and Serial Monitor output
 - `src/oled.cpp`, `src/icons.cpp`, `src/font.cpp`: display driver, weather icons, font
+
+## Tests
+`pio test -e native` runs the watering-rule tests on your PC (see the comment in `platformio.ini` for the compiler setup on Windows).

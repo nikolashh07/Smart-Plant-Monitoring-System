@@ -24,7 +24,6 @@ extern Watering watering;
 void pumpOn();
 void pumpOff();
 int readSoilRaw();
-int rawToPercent(int raw);
 const __FlashStringHelper* soilLabel();
 void waterLogic(unsigned long now);
 void midnightReset(unsigned long now);
