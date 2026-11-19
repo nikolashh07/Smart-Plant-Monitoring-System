@@ -134,6 +134,41 @@ void drawScreen(uint8_t screen, bool full) {
 }
 
 // ---- Serial Monitor: everything the OLED shows, plus the raw reading ----
+static void printSerialWeather() {
+  if (!weather.valid) {
+    Serial.println(F("Weather:  no data"));
+    return;
+  }
+  Serial.print(F("Weather:  ")); Serial.print(weather.tempC, 1); Serial.print(F("C "));
+  Serial.print(weatherText(weather.code));
+  Serial.print(F(" | Hum ")); Serial.print(weather.humidity);
+  Serial.print(F("% | Wind ")); Serial.print((int)(weather.windKmh + 0.5f)); Serial.println(F(" km/h"));
+
+  Serial.print(F("Today:    Hi ")); Serial.print(weather.maxC, 1);
+  Serial.print(F(" / Lo ")); Serial.print(weather.minC, 1);
+  Serial.print(F("C | Rain ")); Serial.print(weather.rainProb);
+  Serial.print(F("% ")); Serial.print(weather.rainMm, 1);
+  Serial.print(F("mm | Evap ")); Serial.print(weather.et0, 1); Serial.println(F("mm"));
+
+  Serial.print(F("Next 4h:  "));
+  for (uint8_t i = 0; i < 4; i++) {
+    if (i == 0) Serial.print(F("Now"));
+    else        { Serial.print(weather.hourly[i].hour); Serial.print('h'); }
+    Serial.print(' '); Serial.print(weather.hourly[i].tempC);
+    Serial.print(F("C ")); Serial.print(weather.hourly[i].rainProb); Serial.print('%');
+    if (i < 3) Serial.print(F(" | "));
+  }
+  Serial.println();
+}
+
+static void printSerialClock() {
+  if (!clockValid) return;
+  uint16_t m = localMinOfDay(millis());
+  Serial.print(F("Time:     ")); Serial.print(m / 60); Serial.print(':');
+  if (m % 60 < 10) Serial.print('0');
+  Serial.print(m % 60); Serial.println(F(" (local, resets pump counters at 00:00)"));
+}
+
 void printSerialStatus() {
   char st[24];
   buildStatus(st, sizeof(st));
@@ -144,35 +179,7 @@ void printSerialStatus() {
   Serial.print(F("   (raw ")); Serial.print(soilRaw); Serial.println(')');
   Serial.print(F("Status:   ")); Serial.println(st);
 
-  if (!weather.valid) {
-    Serial.println(F("Weather:  no data"));
-  } else {
-    Serial.print(F("Weather:  ")); Serial.print(weather.tempC, 1); Serial.print(F("C "));
-    Serial.print(weatherText(weather.code));
-    Serial.print(F(" | Hum ")); Serial.print(weather.humidity);
-    Serial.print(F("% | Wind ")); Serial.print((int)(weather.windKmh + 0.5f)); Serial.println(F(" km/h"));
-
-    Serial.print(F("Today:    Hi ")); Serial.print(weather.maxC, 1);
-    Serial.print(F(" / Lo ")); Serial.print(weather.minC, 1);
-    Serial.print(F("C | Rain ")); Serial.print(weather.rainProb);
-    Serial.print(F("% ")); Serial.print(weather.rainMm, 1);
-    Serial.print(F("mm | Evap ")); Serial.print(weather.et0, 1); Serial.println(F("mm"));
-
-    Serial.print(F("Next 4h:  "));
-    for (uint8_t i = 0; i < 4; i++) {
-      if (i == 0) Serial.print(F("Now"));
-      else        { Serial.print(weather.hourly[i].hour); Serial.print('h'); }
-      Serial.print(' '); Serial.print(weather.hourly[i].tempC);
-      Serial.print(F("C ")); Serial.print(weather.hourly[i].rainProb); Serial.print('%');
-      if (i < 3) Serial.print(F(" | "));
-    }
-    Serial.println();
-  }
+  printSerialWeather();
   Serial.print(F("Pumped:   ")); Serial.print(mlPumpedToday); Serial.println(F(" mL today"));
-  if (clockValid) {
-    uint16_t m = localMinOfDay(millis());
-    Serial.print(F("Time:     ")); Serial.print(m / 60); Serial.print(':');
-    if (m % 60 < 10) Serial.print('0');
-    Serial.print(m % 60); Serial.println(F(" (local, resets pump counters at 00:00)"));
-  }
+  printSerialClock();
 }

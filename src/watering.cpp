@@ -55,6 +55,53 @@ static unsigned long waterCheckMs() {
   return WATER_CHECK_MS;
 }
 
+// A pulse is running: stop the pump once its time is up.
+static void finishPulseIfDone(unsigned long now) {
+  if (now - stateSinceMs < pulseDurationMs) return;
+  pumpOff();
+  mlPumpedToday += lastPulseMl;
+  pulsesInSession++;
+  pumpState = PUMP_SOAKING;
+  stateSinceMs = now;
+}
+
+// Water is spreading through the soil: wait, then check the soil again.
+static void waitForSoak(unsigned long now) {
+  if (now - stateSinceMs < SOAK_MS) return;
+  pumpState = PUMP_IDLE;
+  checkSoon = true;
+}
+
+// Start a session when the soil gets too dry, end it once it is wet enough
+// (hysteresis), and clear any pump fault when the soil recovers.
+static void updateSession() {
+  if (!wateringActive && soilPct < SOIL_START_PCT) { wateringActive = true; pulsesInSession = 0; }
+  if (wateringActive && soilPct >= SOIL_STOP_PCT)  { wateringActive = false; pulsesInSession = 0; pumpFault = false; }
+}
+
+// True if every safety rule allows another pulse right now.
+// Also records why not (rainHold / pumpFault) for the status line.
+static bool pulseAllowed() {
+  rainHold = false;
+  if (!wateringActive || pumpFault) return false;
+  if (pulsesInSession >= MAX_PULSES_PER_SESSION) { pumpFault = true; return false; }
+  if (freezeLock) return false;
+  if (mlPumpedToday >= MAX_ML_PER_DAY) return false;
+  if (rainLikely() && soilPct >= SOIL_CRITICAL_PCT) { rainHold = true; return false; }
+  return true;
+}
+
+// Size the pulse for today's evaporation (capped by MAX_PUMP_MS) and turn the pump on.
+static void startPulse(unsigned long now) {
+  lastPulseMl = (int)(PULSE_ML * etScale() + 0.5);
+  pulseDurationMs = (unsigned long)lastPulseMl * 1000UL / PUMP_ML_PER_SEC;
+  if (pulseDurationMs > MAX_PUMP_MS) pulseDurationMs = MAX_PUMP_MS;
+  lastPulseMl = (int)(pulseDurationMs * PUMP_ML_PER_SEC / 1000UL);
+  pumpOn();
+  pumpState = PUMP_RUNNING;
+  stateSinceMs = now;
+}
+
 void waterLogic(unsigned long now) {
 #if CAL_MODE
   pumpOff();
@@ -67,20 +114,8 @@ void waterLogic(unsigned long now) {
     rainHold = false;
     return;
   }
-  if (pumpState == PUMP_RUNNING) {
-    if (now - stateSinceMs >= pulseDurationMs) {
-      pumpOff();
-      mlPumpedToday += lastPulseMl;
-      pulsesInSession++;
-      pumpState = PUMP_SOAKING;
-      stateSinceMs = now;
-    }
-    return;
-  }
-  if (pumpState == PUMP_SOAKING) {
-    if (now - stateSinceMs >= SOAK_MS) { pumpState = PUMP_IDLE; checkSoon = true; }
-    return;
-  }
+  if (pumpState == PUMP_RUNNING) { finishPulseIfDone(now); return; }
+  if (pumpState == PUMP_SOAKING) { waitForSoak(now);       return; }
 
   // Idle: decide whether to start a pulse.
   if (!checkSoon && now - lastCheckMs < waterCheckMs()) return;
@@ -88,24 +123,8 @@ void waterLogic(unsigned long now) {
   lastCheckMs = now;
 
   freezeLock = weather.valid && weather.minC <= FREEZE_LOCK_C;
-
-  if (!wateringActive && soilPct < SOIL_START_PCT) { wateringActive = true; pulsesInSession = 0; }
-  if (wateringActive && soilPct >= SOIL_STOP_PCT)  { wateringActive = false; pulsesInSession = 0; pumpFault = false; }
-
-  rainHold = false;
-  if (!wateringActive || pumpFault) return;
-  if (pulsesInSession >= MAX_PULSES_PER_SESSION) { pumpFault = true; return; }
-  if (freezeLock) return;
-  if (mlPumpedToday >= MAX_ML_PER_DAY) return;
-  if (rainLikely() && soilPct >= SOIL_CRITICAL_PCT) { rainHold = true; return; }
-
-  lastPulseMl = (int)(PULSE_ML * etScale() + 0.5);
-  pulseDurationMs = (unsigned long)lastPulseMl * 1000UL / PUMP_ML_PER_SEC;
-  if (pulseDurationMs > MAX_PUMP_MS) pulseDurationMs = MAX_PUMP_MS;
-  lastPulseMl = (int)(pulseDurationMs * PUMP_ML_PER_SEC / 1000UL);
-  pumpOn();
-  pumpState = PUMP_RUNNING;
-  stateSinceMs = now;
+  updateSession();
+  if (pulseAllowed()) startPulse(now);
 }
 
 // Reset the pump's daily tracking: millilitres pumped today, the daily limit

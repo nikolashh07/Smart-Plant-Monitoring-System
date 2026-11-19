@@ -65,7 +65,8 @@ const __FlashStringHelper* weatherText(int c) {
 static uint8_t fetchStep = 0;
 static char fetchDbg[120];   // first bytes the ESP-01 sent back (for debugging)
 
-static bool fetchWeatherInner() {
+// Steps 1-3: open the TCP connection and send the forecast request.
+static bool sendWeatherRequest() {
   fetchStep = 1;   // AT+CIPMUX
   if (!espCmd(F("AT+CIPMUX=0"), F("OK"), 2000)) return false;
   fetchStep = 2;   // open TCP connection (fails on DNS / no internet)
@@ -85,10 +86,13 @@ static bool fetchWeatherInner() {
   espWriteP(WEATHER_REQ_B);
   esp.print(locationLon);
   espWriteP(WEATHER_REQ_C);
+  return true;
+}
 
-  fetchStep = 4;   // wait for the server's JSON
-  // Wait for "current":{ while keeping the first bytes received, so a
-  // failure can show what the ESP-01 actually sent.
+// Step 4: skip ahead to "current":{ while keeping the first bytes received,
+// so a failure can show what the ESP-01 actually sent.
+static bool waitForJsonStart() {
+  fetchStep = 4;
   static const char KEY[] PROGMEM = "\"current\":{";
   uint8_t dbgLen = 0, matched = 0;
   bool gotKey = false;
@@ -104,16 +108,16 @@ static bool fetchWeatherInner() {
     }
   }
   fetchDbg[dbgLen] = 0;
-  if (!gotKey) return false;
+  return gotKey;
+}
 
-  esp.setTimeout(8000);
-  Weather w;
-  fetchStep = 5;   // parsing the fields
+// "current" block: local time (hh:mm) and the conditions right now.
+static bool parseCurrent(Weather& w, int& hh, int& mm) {
   // "time":"2026-11-04T16:00" (local time) -> hour and minute
   if (!esp.find((char*)"\"time\":\"")) return false;
   if (!esp.find((char*)"T"))           return false;
-  int hh = esp.parseInt();
-  int mm = esp.parseInt();
+  hh = esp.parseInt();
+  mm = esp.parseInt();
   if (!esp.find((char*)"\"temperature_2m\":"))       return false;
   w.tempC = esp.parseFloat();
   if (!esp.find((char*)"\"relative_humidity_2m\":")) return false;
@@ -124,8 +128,12 @@ static bool fetchWeatherInner() {
   w.windKmh = esp.parseFloat();
   if (!esp.find((char*)"\"precipitation\":"))        return false;
   w.precipNow = esp.parseFloat();
+  return true;
+}
 
-  // Next 4 hours. "hourly":{ does not match "hourly_units":{ .
+// "hourly" block: this hour and the next 3.
+static bool parseHourly(Weather& w) {
+  // "hourly":{ does not match "hourly_units":{ .
   if (!esp.find((char*)"\"hourly\":{")) return false;
   if (!esp.find((char*)"\"time\":["))   return false;
   for (uint8_t i = 0; i < 4; i++) {          // "2026-11-04T20:00" -> 20
@@ -138,7 +146,11 @@ static bool fetchWeatherInner() {
   for (uint8_t i = 0; i < 4; i++) w.hourly[i].rainProb = esp.parseInt();
   if (!esp.find((char*)"\"weather_code\":["))             return false;
   for (uint8_t i = 0; i < 4; i++) w.hourly[i].code = esp.parseInt();
+  return true;
+}
 
+// "daily" block: today's rain, evaporation and temperature range.
+static bool parseDaily(Weather& w) {
   // "daily":{ does not match "daily_units":{ so we land in the right object.
   if (!esp.find((char*)"\"daily\":{")) return false;
   if (!esp.find((char*)"\"precipitation_probability_max\":[")) return false;
@@ -151,8 +163,11 @@ static bool fetchWeatherInner() {
   w.minC = esp.parseFloat();
   if (!esp.find((char*)"\"temperature_2m_max\":["))            return false;
   w.maxC = esp.parseFloat();
+  return true;
+}
 
-  w.valid = true;
+// Store a good reading and update the clock and rain-mode trackers.
+static void applyWeather(const Weather& w, int hh, int mm) {
   weather = w;
 
   if (hh >= 0 && hh < 24 && mm >= 0 && mm < 60) {
@@ -165,7 +180,22 @@ static bool fetchWeatherInner() {
     rainSeen = true;
     lastRainMs = millis();
   }
+}
 
+static bool fetchWeatherInner() {
+  if (!sendWeatherRequest()) return false;
+  if (!waitForJsonStart())   return false;
+
+  esp.setTimeout(8000);
+  Weather w;
+  int hh, mm;
+  fetchStep = 5;   // parsing the fields
+  if (!parseCurrent(w, hh, mm)) return false;
+  if (!parseHourly(w))          return false;
+  if (!parseDaily(w))           return false;
+
+  w.valid = true;
+  applyWeather(w, hh, mm);
   return true;
 }
 
@@ -229,26 +259,29 @@ bool fetchLocation() {
   return ok;
 }
 
+// Say (on the Serial Monitor) which stage the last weather fetch got to.
+static void printFetchFailure() {
+  Serial.print(F("  fetch failed at step "));
+  Serial.print(fetchStep);
+  switch (fetchStep) {
+    case 1: Serial.println(F(" (ESP-01 not answering)")); break;
+    case 2: Serial.println(F(" (can't reach api.open-meteo.com: no internet / DNS?)")); break;
+    case 3: Serial.println(F(" (connected but couldn't send request)")); break;
+    case 4:
+      Serial.println(F(" (no/odd reply from server)"));
+      Serial.print(F("  ESP-01 sent: \""));
+      Serial.print(fetchDbg);
+      Serial.println('"');
+      break;
+    default: Serial.println(F(" (reply didn't match expected format)")); break;
+  }
+}
+
 // Always closes the TCP connection afterwards. Without this, a failed fetch
 // left the connection open and every retry died with "ALREADY CONNECTED".
 bool fetchWeather() {
   bool ok = fetchWeatherInner();
-  if (!ok) {
-    Serial.print(F("  fetch failed at step "));
-    Serial.print(fetchStep);
-    switch (fetchStep) {
-      case 1: Serial.println(F(" (ESP-01 not answering)")); break;
-      case 2: Serial.println(F(" (can't reach api.open-meteo.com: no internet / DNS?)")); break;
-      case 3: Serial.println(F(" (connected but couldn't send request)")); break;
-      case 4:
-        Serial.println(F(" (no/odd reply from server)"));
-        Serial.print(F("  ESP-01 sent: \""));
-        Serial.print(fetchDbg);
-        Serial.println('"');
-        break;
-      default: Serial.println(F(" (reply didn't match expected format)")); break;
-    }
-  }
+  if (!ok) printFetchFailure();
   esp.println(F("AT+CIPCLOSE"));
   delay(300);
   espFlush();
