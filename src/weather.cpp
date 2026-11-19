@@ -1,3 +1,4 @@
+// Weather and location client: ESP-01 AT commands, Open-Meteo forecast, ip-api.com lookup.
 #include "config.h"
 #include "esp.h"
 #include "weather.h"
@@ -18,7 +19,7 @@ uint16_t localMinOfDay(unsigned long now) {
   return (clockSyncMinOfDay + (now - clockSyncMs) / 60000UL) % 1440;
 }
 
-// Where we are. Starts as the fallback values above; replaced by the
+// Where we are. Starts as the fallback values in config.h; replaced by the
 // IP-based lookup when AUTO_LOCATION is on and it succeeds.
 char locationName[22];
 char locationLat[10];

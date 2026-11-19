@@ -1,3 +1,4 @@
+// What the OLED and the Serial Monitor show. Page 7 is always the status line.
 #include <Arduino.h>
 #include "config.h"
 #include "oled.h"
@@ -6,7 +7,6 @@
 #include "watering.h"
 #include "screens.h"
 
-// =====================================================================
 // One-line status text, shared by the OLED bottom line and the Serial Monitor.
 static void buildStatus(char* out, size_t n) {
 #if CAL_MODE
@@ -30,7 +30,7 @@ static void drawStatusLine() {
   oledPrintLine(line, 7);
 }
 
-// ---- Screens ----------------------------------------------------------
+// ---- OLED screens (they rotate every SCREEN_SWITCH_MS) -----------------
 // 1) NOW: icon, big temperature, condition, humidity, wind
 static void drawNowScreen() {
   char a[12], v[12];

@@ -15,7 +15,7 @@ struct Weather {
   int   code = 0;
   float windKmh = 0;
   float precipNow = 0;  // rain right now, mm
-  HourForecast hourly[4];         // this hour + the next 3
+  HourForecast hourly[4]; // this hour + the next 3
   int   rainProb = 0;   // today's max chance of rain, %
   float rainMm = 0;     // today's expected rain, mm
   float et0 = 3.0;      // today's reference evapotranspiration, mm

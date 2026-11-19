@@ -3,7 +3,7 @@
 #include "oled.h"
 #include "icons.h"
 
-// ---- Weather icons, drawn at runtime (no bitmap tables) ---------------
+// Weather icons are drawn at runtime, so no bitmap tables eat flash.
 // Shapes are defined on a 24x24 grid and sampled at 16 or 24 px.
 enum : uint8_t { ICON_SUN, ICON_PART, ICON_CLOUD, ICON_FOG, ICON_RAIN, ICON_SNOW, ICON_STORM };
 

@@ -1,3 +1,4 @@
+// ESP-01 (AT firmware) helpers: send a command, wait for a reply, join WiFi.
 #include "config.h"
 #include "esp.h"
 

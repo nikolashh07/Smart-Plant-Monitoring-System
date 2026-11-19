@@ -1,13 +1,14 @@
+// Soil reading, watering rules and the pump state machine.
 #include "config.h"
 #include "weather.h"
 #include "watering.h"
 
 PumpState pumpState = PUMP_IDLE;
-unsigned long dayStartMs = 0;
+unsigned long dayStartMs = 0;                 // when the daily counters last reset
 static unsigned long stateSinceMs = 0, lastCheckMs = 0, pulseDurationMs = 0;
 static bool checkSoon = true;
-bool wateringActive = false;     // true from "too dry" until "wet enough" (hysteresis)
-bool pumpFault = false;       // soil didn't respond to water: pump/reservoir problem
+bool wateringActive = false;
+bool pumpFault = false;
 bool rainHold = false;
 bool freezeLock = false;
 static uint8_t pulsesInSession = 0;

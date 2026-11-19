@@ -1,11 +1,10 @@
+// SSD1306 128x64 OLED driver (I2C) and the text and shape helpers built on it.
 #include <Wire.h>
 #include "config.h"
 #include "font.h"
 #include "oled.h"
 
-// =====================================================================
-// OLED driver
-// =====================================================================
+// ---- Low-level driver -------------------------------------------------
 void oledCommand(uint8_t c) {
   Wire.beginTransmission(OLED_ADDR);
   Wire.write(0x00);

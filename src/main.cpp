@@ -1,3 +1,4 @@
+// Radish bed watering controller: wires the modules together.
 #include <Arduino.h>
 #include "config.h"
 #include "oled.h"

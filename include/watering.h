@@ -5,8 +5,8 @@ enum PumpState : uint8_t { PUMP_IDLE, PUMP_RUNNING, PUMP_SOAKING };
 
 extern PumpState pumpState;
 extern unsigned long dayStartMs;
-extern bool wateringActive;      // true from "too dry" until "wet enough" (hysteresis)
-extern bool pumpFault;        // soil didn't respond to water: pump/reservoir problem
+extern bool wateringActive;  // true from "too dry" until "wet enough" (hysteresis)
+extern bool pumpFault;       // soil didn't respond to water: pump/reservoir problem
 extern bool rainHold;
 extern bool freezeLock;
 extern int mlPumpedToday;
